@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harmony Bird</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Start/Game Over UI -->
+        <div id="game-ui" class="centered-ui">
+            <button id="start-btn">Start Game</button>
+            <div id="game-over" style="display: none;">
+                <h2>Game Over!</h2>
+                <div id="final-score">Score: 0</div>
+                <button id="restart-btn">Play Again</button>
+            </div>
+        </div>
+
+        <!-- In-game UI (initially hidden) -->
+        <div id="game-stats" style="display: none;">
+            <div id="score">Score: 0</div>
+            <div id="current-note">Current Note: --</div>
+            <div id="target-note">Target Note: --</div>
+        </div>
+    </div>
+
+    <!-- Load scripts -->
+    <script src="js/audio/PitchDetector.js"></script>
+    <script src="js/audio/HarmonyAnalyzer.js"></script>
+    <script src="js/audio/AudioManager.js"></script>
+    <script src="js/game/Bird.js"></script>
+    <script src="js/game/Obstacle.js"></script>
+    <script src="js/game/Game.js"></script>
+    <script src="js/data/SongDatabase.js"></script>
+    
+    <!-- Initialize game -->
+    <script>
+        window.addEventListener('load', () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Your browser does not support audio input. Please use a modern browser like Chrome or Firefox.');
+                return;
+            }
+            console.log('Page loaded, initializing game...');
+            window.game = new Game();
+            console.log('Game instance created');
+        });
+    </script>
+</body>
+</html> 
