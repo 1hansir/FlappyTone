@@ -76,34 +76,49 @@ class Game {
             this.gameUI.style.display = 'none';
             this.gameStats.style.display = 'block';
 
-            // Request microphone access if we don't have it
-            if (!this.microphoneStream) {
-                this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: false
+            // Request microphone access
+            if (!this.microphoneStream || !this.microphoneStream.active) {
+                try {
+                    console.log('Game: Requesting microphone access...');
+                    const stream = await window.electronAPI.requestMicrophone();
+                    
+                    if (!stream || !stream.active) {
+                        throw new Error('Failed to get active microphone stream');
                     }
-                });
-                console.log('Game: Microphone access granted');
+
+                    // Store the stream and verify its properties
+                    this.microphoneStream = stream;
+                    const tracks = stream.getAudioTracks();
+                    console.log('Game: Microphone stream details:', {
+                        active: stream.active,
+                        id: stream.id,
+                        trackCount: tracks.length,
+                        trackSettings: tracks[0]?.getSettings()
+                    });
+
+                    // Ensure we have audio tracks
+                    if (tracks.length === 0) {
+                        throw new Error('No audio tracks in microphone stream');
+                    }
+                } catch (error) {
+                    console.error('Game: Microphone access error:', error);
+                    this.gameUI.style.display = 'block';
+                    this.gameStats.style.display = 'none';
+                    throw error;
+                }
             }
 
-            // Clean up existing audio resources first
-            if (this.audioManager) {
-                this.audioManager.cleanup(false);
+            // Initialize audio with verified stream
+            try {
+                if (!this.audioManager) {
+                    this.audioManager = new AudioManager();
+                }
+                await this.audioManager.start(this.microphoneStream);
+                console.log('Game: AudioManager initialized');
+            } catch (error) {
+                console.error('Game: AudioManager initialization error:', error);
+                throw error;
             }
-
-            // Create new AudioManager and initialize with stream
-            this.audioManager = new AudioManager();
-            await this.audioManager.start(this.microphoneStream);
-            console.log('Game: AudioManager initialized');
-
-            // Clean up and reinitialize SongDatabase
-            if (this.songDatabase) {
-                this.songDatabase.cleanup();
-            }
-            this.songDatabase = new SongDatabase();
-            await this.songDatabase.init();
 
             // Initialize game state
             this.obstacles = [];
@@ -111,21 +126,21 @@ class Game {
             this.score = 0;
             this.isGameOver = false;
 
-            // Start the game and audio
+            // Start the game loop
             this.isRunning = true;
-            this.songDatabase.generateNewMelody();
-            this.songDatabase.playMelody();
-            
-            // Reset HarmonyAnalyzer
-            this.harmonyAnalyzer = new HarmonyAnalyzer(this.songDatabase);
+            if (this.songDatabase) {
+                this.songDatabase.generateNewMelody();
+                this.songDatabase.playMelody();
+            }
             
             console.log('Game: Starting game loop');
             this.gameLoop();
 
         } catch (error) {
-            console.error('Game: Failed to start game:', error);
+            console.error('Game start error:', error);
             this.gameUI.style.display = 'block';
             this.gameStats.style.display = 'none';
+            throw error;
         }
     }
 

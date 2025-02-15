@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Harmony Bird</title>
     <link rel="stylesheet" href="styles/main.css">
-    <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
+    <!-- Add ml5.js from CDN -->
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
 </head>
 <body>
+    <!-- Add an audio test element -->
+    <audio id="audioTest" style="display: none"></audio>
+    
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         
@@ -30,24 +34,49 @@
     </div>
 
     <!-- Load scripts -->
-    <script src="js/audio/PitchDetector.js"></script>
-    <script src="js/audio/HarmonyAnalyzer.js"></script>
-    <script src="js/audio/AudioManager.js"></script>
-    <script src="js/game/Bird.js"></script>
-    <script src="js/game/Obstacle.js"></script>
-    <script src="js/game/Game.js"></script>
-    <script src="js/data/SongDatabase.js"></script>
+    <script src="./js/audio/PitchDetector.js"></script>
+    <script src="./js/audio/HarmonyAnalyzer.js"></script>
+    <script src="./js/audio/AudioManager.js"></script>
+    <script src="./js/game/Bird.js"></script>
+    <script src="./js/game/Obstacle.js"></script>
+    <script src="./js/data/SongDatabase.js"></script>
+    <script src="./js/game/Game.js"></script>
     
-    <!-- Initialize game -->
     <script>
-        window.addEventListener('load', () => {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('Your browser does not support audio input. Please use a modern browser like Chrome or Firefox.');
+        // Wait for all scripts to load
+        window.addEventListener('load', async () => {
+            console.log('Window loaded, checking electronAPI...');
+            
+            // Verify electronAPI is available
+            if (!window.electronAPI) {
+                console.error('electronAPI not found!');
                 return;
             }
-            console.log('Page loaded, initializing game...');
-            window.game = new Game();
-            console.log('Game instance created');
+
+            // Initialize game
+            const game = new Game();
+            
+            // Add click listener to start button
+            const startButton = document.getElementById('start-btn');
+            if (startButton) {
+                startButton.addEventListener('click', async () => {
+                    console.log('Start button clicked');
+                    try {
+                        // Request microphone access first
+                        const stream = await window.electronAPI.requestMicrophone();
+                        if (!stream) {
+                            throw new Error('No microphone stream received');
+                        }
+                        console.log('Microphone access granted:', stream);
+                        
+                        // Start the game with the stream
+                        await game.start();
+                    } catch (error) {
+                        console.error('Failed to start game:', error);
+                        alert('Failed to access microphone. Please ensure microphone permissions are granted.');
+                    }
+                });
+            }
         });
     </script>
 </body>
