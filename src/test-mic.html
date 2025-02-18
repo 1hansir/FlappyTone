@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microphone Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+    </style>
+</head>
+<body>
+    <h1>Microphone Access Test</h1>
+    <button id="test-mic">Test Microphone</button>
+    <div id="status"></div>
+    <pre id="details"></pre>
+
+    <script>
+        document.getElementById('test-mic').addEventListener('click', async () => {
+            const status = document.getElementById('status');
+            const details = document.getElementById('details');
+            
+            try {
+                const result = await window.electronAPI.testMicrophone();
+                status.textContent = result.message;
+                status.className = 'success';
+                details.textContent = JSON.stringify(result.tracks, null, 2);
+            } catch (error) {
+                status.textContent = `Error: ${error.message}`;
+                status.className = 'error';
+                details.textContent = '';
+            }
+        });
+    </script>
+</body>
+</html> 

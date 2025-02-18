@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaStream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>MediaStream Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>1. Basic MediaStream Access</h2>
+        <button id="test-basic">Test Basic Access</button>
+        <div id="basic-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Stream Properties Test</h2>
+        <button id="test-properties">Test Stream Properties</button>
+        <div id="properties-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Audio Track Test</h2>
+        <button id="test-tracks">Test Audio Tracks</button>
+        <div id="tracks-log" class="log"></div>
+    </div>
+
+    <script>
+        function log(elementId, message, isError = false) {
+            const logElement = document.getElementById(elementId);
+            const entry = document.createElement('div');
+            entry.className = isError ? 'error' : 'success';
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logElement.appendChild(entry);
+        }
+
+        async function testBasicAccess() {
+            const logId = 'basic-log';
+            try {
+                log(logId, 'Requesting microphone access...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                log(logId, `Stream obtained successfully (id: ${stream.id})`);
+                return stream;
+            } catch (error) {
+                log(logId, `Error: ${error.message}`, true);
+                throw error;
+            }
+        }
+
+        async function testStreamProperties(stream) {
+            const logId = 'properties-log';
+            try {
+                log(logId, 'Testing stream properties...');
+                log(logId, `Stream active: ${stream.active}`);
+                log(logId, `Stream id: ${stream.id}`);
+                log(logId, `Stream instanceof MediaStream: ${stream instanceof MediaStream}`);
+                return true;
+            } catch (error) {
+                log(logId, `Error: ${error.message}`, true);
+                return false;
+            }
+        }
+
+        async function testAudioTracks(stream) {
+            const logId = 'tracks-log';
+            try {
+                const tracks = stream.getAudioTracks();
+                log(logId, `Number of audio tracks: ${tracks.length}`);
+                
+                tracks.forEach((track, index) => {
+                    log(logId, `Track ${index + 1}:`);
+                    log(logId, `  Label: ${track.label}`);
+                    log(logId, `  Enabled: ${track.enabled}`);
+                    log(logId, `  Muted: ${track.muted}`);
+                    log(logId, `  ReadyState: ${track.readyState}`);
+                });
+            } catch (error) {
+                log(logId, `Error: ${error.message}`, true);
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('test-basic').addEventListener('click', async () => {
+            try {
+                const stream = await testBasicAccess();
+                window.testStream = stream; // Store for other tests
+            } catch (error) {
+                console.error('Basic test failed:', error);
+            }
+        });
+
+        document.getElementById('test-properties').addEventListener('click', async () => {
+            if (!window.testStream) {
+                log('properties-log', 'No stream available. Run basic test first.', true);
+                return;
+            }
+            await testStreamProperties(window.testStream);
+        });
+
+        document.getElementById('test-tracks').addEventListener('click', async () => {
+            if (!window.testStream) {
+                log('tracks-log', 'No stream available. Run basic test first.', true);
+                return;
+            }
+            await testAudioTracks(window.testStream);
+        });
+    </script>
+</body>
+</html> 

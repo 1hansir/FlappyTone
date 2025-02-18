@@ -26,6 +26,7 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         { from: 'src/index.html', to: '.' },
+        { from: 'src/test-mic.html', to: '.' },
         { from: 'src/styles', to: 'styles' },
         { from: 'src/js', to: 'js' }
       ]

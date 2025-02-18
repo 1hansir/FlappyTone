@@ -1,102 +1,131 @@
-const { app, BrowserWindow, systemPreferences } = require('electron');
+const { app, BrowserWindow, systemPreferences, session } = require('electron');
 const path = require('path');
 
 let mainWindow;
 
 async function requestMicrophoneAccess() {
+    console.log('Requesting microphone access...');
+    console.log('Platform:', process.platform);
+    
     if (process.platform === 'darwin') {
         try {
             const micStatus = systemPreferences.getMediaAccessStatus('microphone');
             console.log('Initial microphone access status:', micStatus);
 
             if (micStatus !== 'granted') {
-                console.log('Requesting microphone access...');
+                console.log('Requesting macOS microphone permission...');
                 const granted = await systemPreferences.askForMediaAccess('microphone');
-                console.log('Microphone access request result:', granted);
+                console.log('macOS microphone permission result:', granted);
                 return granted;
             }
-            console.log('Microphone access already granted');
+            console.log('Microphone access already granted on macOS');
             return true;
         } catch (error) {
-            console.error('Error requesting microphone access:', error);
+            console.error('Error requesting macOS microphone access:', error);
             return false;
         }
+    } else {
+        // For Windows and Linux, we'll rely on the browser API
+        console.log('Non-macOS platform, will request through browser API');
+        return true;
     }
-    return true;
 }
 
 async function createWindow() {
     console.log('Creating window...');
     
-    // Request microphone access first
-    const hasMicrophoneAccess = await requestMicrophoneAccess();
-    console.log('Has microphone access:', hasMicrophoneAccess);
-    
-    if (!hasMicrophoneAccess) {
-        console.error('Microphone access denied');
-        app.quit();
-        return;
-    }
-
-    mainWindow = new BrowserWindow({
-        width: 850,
-        height: 650,
-        webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            webSecurity: true,
-            sandbox: false,
-            preload: path.join(__dirname, 'preload.js')
+    try {
+        // Request microphone access first
+        const hasMicrophoneAccess = await requestMicrophoneAccess();
+        console.log('Has microphone access:', hasMicrophoneAccess);
+        
+        if (!hasMicrophoneAccess) {
+            console.error('Microphone access denied');
+            app.quit();
+            return;
         }
-    });
 
-    // Set secure CSP headers with media permissions
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-        callback({
-            responseHeaders: {
-                ...details.responseHeaders,
-                'Content-Security-Policy': [
-                    "default-src 'self'",
-                    "script-src 'self' 'unsafe-inline' https://unpkg.com",
-                    "style-src 'self' 'unsafe-inline'",
-                    "media-src 'self' blob: mediadevices:",
-                    "connect-src 'self' blob: mediadevices: https://unpkg.com https://cdn.jsdelivr.net",
-                    "img-src 'self' data: blob:"
-                ].join('; ')
+        // Set up session permissions before creating window
+        session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+            console.log('Permission requested:', permission);
+            if (permission === 'media' || 
+                permission === 'microphone' || 
+                permission === 'audio-capture') {
+                callback(true);
+            } else {
+                callback(false);
             }
         });
-    });
 
-    // Set permission handler with logging
-    mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-        console.log('Permission requested:', permission);
-        if (permission === 'media' || permission === 'microphone') {
-            console.log('Granting microphone permission');
-            callback(true);
+        mainWindow = new BrowserWindow({
+            width: 850,
+            height: 650,
+            webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false,
+                webSecurity: true,
+                sandbox: false,
+                preload: path.join(__dirname, 'preload.js'),
+                webgl: true,
+                enableWebAudio: true,
+                audioPlayback: true
+            }
+        });
+
+        // Handle renderer process crashes with recovery
+        mainWindow.webContents.on('render-process-gone', async (event, details) => {
+            console.error('Renderer process gone:', details.reason, details);
+            
+            if (details.reason === 'crashed' || details.reason === 'killed') {
+                try {
+                    // Don't try to execute JavaScript in the crashed renderer
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    if (!mainWindow.isDestroyed()) {
+                        // Create a new window instead of reloading
+                        const oldWindow = mainWindow;
+                        await createWindow();
+                        if (oldWindow && !oldWindow.isDestroyed()) {
+                            oldWindow.close();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error during crash recovery:', error);
+                    if (!mainWindow.isDestroyed()) {
+                        mainWindow.reload();
+                    } else {
+                        app.quit();
+                    }
+                }
+            }
+        });
+
+        // Handle unresponsive window
+        mainWindow.on('unresponsive', () => {
+            console.error('Window became unresponsive');
+            if (!mainWindow.isDestroyed()) {
+                mainWindow.reload();
+            }
+        });
+
+        if (process.env.NODE_ENV === 'development') {
+            await mainWindow.loadFile('src/index.html');
+            mainWindow.webContents.openDevTools();
         } else {
-            console.log('Denying permission:', permission);
-            callback(false);
+            await mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
         }
-    });
 
-    // Enable audio
-    mainWindow.webContents.audioMuted = false;
+        // Ensure audio is properly initialized
+        mainWindow.webContents.on('did-finish-load', () => {
+            console.log('Window loaded successfully');
+            mainWindow.webContents.audioMuted = false;
+            mainWindow.webContents.setAudioMuted(false);
+        });
 
-    // Load content
-    if (process.env.NODE_ENV === 'development') {
-        console.log('Loading in development mode...');
-        await mainWindow.loadFile('src/index.html');
-        // Always open DevTools in development
-        mainWindow.webContents.openDevTools();
-    } else {
-        console.log('Loading in production mode...');
-        mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    } catch (error) {
+        console.error('Error creating window:', error);
+        app.quit();
     }
-
-    // Log window ready
-    mainWindow.webContents.on('did-finish-load', () => {
-        console.log('Window loaded successfully');
-    });
 }
 
 // Initialize app
@@ -129,29 +158,3 @@ process.on('uncaughtException', (error) => {
 
 // Create preload script with proper permissions
 const fs = require('fs');
-const preloadContent = `
-const { contextBridge } = require('electron');
-
-contextBridge.exposeInMainWorld('electronAPI', {
-    requestMicrophone: async () => {
-        try {
-            console.log('Requesting microphone access from preload...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: false
-                },
-                video: false
-            });
-            console.log('Microphone stream obtained:', stream);
-            return stream;
-        } catch (error) {
-            console.error('Microphone access error in preload:', error);
-            throw error;
-        }
-    }
-});
-`;
-
-fs.writeFileSync(path.join(__dirname, 'preload.js'), preloadContent); 

@@ -7,7 +7,10 @@
     "build": "webpack --config webpack.config.js --mode production",
     "watch": "webpack --config webpack.config.js --mode development --watch",
     "start": "NODE_ENV=development electron .",
+    "test:stream": "NODE_ENV=development TEST_STREAM=true electron .",
+    "start:test": "NODE_ENV=development TEST_MIC=true electron .",
     "start-prod": "npm run build && electron .",
+    "start-prod:test": "npm run build && TEST_MIC=true electron .",
     "package": "electron-builder"
   },
   "build": {

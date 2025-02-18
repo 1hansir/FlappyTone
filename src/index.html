@@ -5,8 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Harmony Bird</title>
     <link rel="stylesheet" href="styles/main.css">
-    <!-- Add ml5.js from CDN -->
-    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+    <!-- Add error handling to ml5.js script loading -->
+    <script>
+        window.addEventListener('error', (event) => {
+            if (event.target.src && event.target.src.includes('ml5')) {
+                console.error('Failed to load ml5.js:', {
+                    src: event.target.src,
+                    error: event.error,
+                    type: event.type
+                });
+            }
+        }, true);
+    </script>
+    <!-- Load ml5.js before other scripts -->
+    <script 
+        src="https://unpkg.com/ml5@0.4.3/dist/ml5.min.js" 
+        crossorigin="anonymous"
+        onload="console.log('ml5.js loaded successfully')"
+        onerror="console.error('Failed to load ml5.js')">
+    </script>
 </head>
 <body>
     <!-- Add an audio test element -->
@@ -47,33 +64,45 @@
         window.addEventListener('load', async () => {
             console.log('Window loaded, checking electronAPI...');
             
-            // Verify electronAPI is available
+            // Wait for ml5.js to be available
+            let ml5LoadAttempts = 0;
+            while (typeof ml5 === 'undefined' && ml5LoadAttempts < 20) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+                ml5LoadAttempts++;
+            }
+            
+            if (typeof ml5 === 'undefined') {
+                console.error('Failed to load ml5.js after multiple attempts');
+                alert('Failed to initialize audio processing. Please refresh the page.');
+                return;
+            }
+
             if (!window.electronAPI) {
                 console.error('electronAPI not found!');
                 return;
             }
 
-            // Initialize game
             const game = new Game();
             
-            // Add click listener to start button
             const startButton = document.getElementById('start-btn');
             if (startButton) {
                 startButton.addEventListener('click', async () => {
+                    startButton.disabled = true; // Prevent multiple clicks
                     console.log('Start button clicked');
                     try {
-                        // Request microphone access first
-                        const stream = await window.electronAPI.requestMicrophone();
-                        if (!stream) {
-                            throw new Error('No microphone stream received');
-                        }
-                        console.log('Microphone access granted:', stream);
+                        const constraints = await window.electronAPI.requestMicrophone();
+                        const stream = await navigator.mediaDevices.getUserMedia(constraints);
                         
-                        // Start the game with the stream
+                        if (!stream || !(stream instanceof MediaStream)) {
+                            throw new Error('Invalid microphone stream received');
+                        }
+
+                        game.microphoneStream = stream;
                         await game.start();
                     } catch (error) {
                         console.error('Failed to start game:', error);
                         alert('Failed to access microphone. Please ensure microphone permissions are granted.');
+                        startButton.disabled = false; // Re-enable button on error
                     }
                 });
             }

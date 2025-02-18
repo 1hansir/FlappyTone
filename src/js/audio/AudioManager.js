@@ -12,15 +12,14 @@ class AudioManager {
             throw new Error('No audio stream provided');
         }
         
-        this.stream = stream;
-        
-        // Create new PitchDetector instance
-        this.pitchDetector = new PitchDetector();
-        
         try {
-            await this.pitchDetector.init(stream);
-            // Make sure pitch detection starts
-            await this.pitchDetector.startPitchDetection();
+            // Store the stream directly
+            this.stream = stream;
+            
+            // Create new PitchDetector instance
+            this.pitchDetector = new PitchDetector();
+            
+            await this.pitchDetector.init(this.stream);
             this.isInitialized = true;
             console.log('AudioManager: Initialized successfully');
         } catch (error) {
@@ -35,7 +34,6 @@ class AudioManager {
             this.pitchDetector = null;
         }
         
-        // Only stop the stream if explicitly requested
         if (stopStream && this.stream) {
             this.stream.getTracks().forEach(track => {
                 track.stop();

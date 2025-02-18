@@ -7,39 +7,68 @@ class PitchDetector {
         this.isInitialized = false;
         this.currentPitch = 0;
         this.pitchModel = null;
+        this.modelLoaded = false;
+    }
+
+    async waitForMl5() {
+        return new Promise((resolve, reject) => {
+            if (typeof ml5 !== 'undefined') {
+                console.log('PitchDetector: ml5 already available');
+                resolve();
+                return;
+            }
+
+            const maxAttempts = 20;
+            let attempts = 0;
+            
+            const checkMl5 = setInterval(() => {
+                attempts++;
+                console.log(`PitchDetector: Waiting for ml5... (${attempts}/${maxAttempts})`);
+                
+                if (typeof ml5 !== 'undefined') {
+                    clearInterval(checkMl5);
+                    console.log('PitchDetector: ml5 loaded successfully');
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkMl5);
+                    reject(new Error('ml5.js failed to load'));
+                }
+            }, 250);
+        });
     }
 
     async init(stream) {
-        if (this.isInitialized) {
-            console.log('PitchDetector: Already initialized');
-            return;
-        }
-
+        console.log('PitchDetector: Starting initialization...');
+        
         try {
-            if (!stream) {
-                throw new Error('No audio stream provided');
-            }
-
-            // Create audio context
+            // Wait for ml5 to load first
+            await this.waitForMl5();
+            
+            // Initialize audio context and analyzer
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             await this.audioContext.resume();
             
-            // Create and configure analyzer
             this.analyser = this.audioContext.createAnalyser();
             this.analyser.fftSize = 2048;
             
-            // Connect stream to analyzer
+            // Connect stream
             this.mediaStream = stream;
-            const source = this.audioContext.createMediaStreamSource(stream);
+            const source = this.audioContext.createMediaStreamSource(this.mediaStream);
             source.connect(this.analyser);
 
-            // Initialize ml5 pitch detection
-            this.pitchModel = await ml5.pitchDetection(
-                'https://cdn.jsdelivr.net/gh/ml5js/ml5-data-and-models/models/pitch-detection/crepe/',
-                this.audioContext,
-                stream,
-                this.modelLoaded.bind(this)
-            );
+            // Initialize pitch detection
+            this.pitchModel = await new Promise((resolve, reject) => {
+                const model = ml5.pitchDetection(
+                    'https://cdn.jsdelivr.net/gh/ml5js/ml5-data-and-models/models/pitch-detection/crepe/',
+                    this.audioContext,
+                    this.mediaStream,
+                    () => {
+                        console.log('PitchDetector: Model loaded');
+                        this.modelLoaded = true;
+                        resolve(model);
+                    }
+                );
+            });
 
             this.isInitialized = true;
             this.startPitchDetection();
@@ -48,11 +77,6 @@ class PitchDetector {
             console.error('PitchDetector: Error initializing:', error);
             throw error;
         }
-    }
-
-    modelLoaded() {
-        console.log('PitchDetector: Model loaded');
-        this.startPitchDetection();
     }
 
     async startPitchDetection() {

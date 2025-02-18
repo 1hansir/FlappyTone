@@ -10,8 +10,7 @@ class Game {
         this.bird = new Bird();
         this.obstacles = [];
         this.songDatabase = new SongDatabase();
-        this.audioManager = new AudioManager();
-        // Pass songDatabase to HarmonyAnalyzer
+        this.audioManager = null;
         this.harmonyAnalyzer = new HarmonyAnalyzer(this.songDatabase);
         
         this.score = 0;
@@ -34,6 +33,8 @@ class Game {
         this.lastFPSUpdate = 0;
         this.fpsUpdateInterval = 1000; // Update FPS every second
         this.currentFPS = 0;
+        
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
         this.init();
         console.log('Game: Initialization complete');
@@ -72,49 +73,50 @@ class Game {
     async start() {
         console.log('Game: Starting game...');
         try {
-            // Hide start UI and show game stats
             this.gameUI.style.display = 'none';
             this.gameStats.style.display = 'block';
 
-            // Request microphone access
-            if (!this.microphoneStream || !this.microphoneStream.active) {
+            // Resume AudioContext (must be done after user interaction)
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+            console.log('Game: AudioContext state:', this.audioContext.state);
+
+            // Request microphone access if not already available
+            if (!this.microphoneStream) {
+                console.log('Game: Requesting microphone access...');
                 try {
-                    console.log('Game: Requesting microphone access...');
-                    const stream = await window.electronAPI.requestMicrophone();
-                    
-                    if (!stream || !stream.active) {
-                        throw new Error('Failed to get active microphone stream');
-                    }
-
-                    // Store the stream and verify its properties
+                    const constraints = await window.electronAPI.requestMicrophone();
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
                     this.microphoneStream = stream;
-                    const tracks = stream.getAudioTracks();
-                    console.log('Game: Microphone stream details:', {
-                        active: stream.active,
-                        id: stream.id,
-                        trackCount: tracks.length,
-                        trackSettings: tracks[0]?.getSettings()
-                    });
-
-                    // Ensure we have audio tracks
-                    if (tracks.length === 0) {
-                        throw new Error('No audio tracks in microphone stream');
-                    }
                 } catch (error) {
-                    console.error('Game: Microphone access error:', error);
-                    this.gameUI.style.display = 'block';
-                    this.gameStats.style.display = 'none';
-                    throw error;
+                    console.error('Game: Failed to get microphone stream:', error);
+                    throw new Error('Failed to access microphone');
                 }
             }
 
-            // Initialize audio with verified stream
-            try {
-                if (!this.audioManager) {
-                    this.audioManager = new AudioManager();
+            // Verify stream is active
+            const tracks = this.microphoneStream.getAudioTracks();
+            if (tracks.length === 0) {
+                throw new Error('No audio tracks in microphone stream');
+            }
+
+            // Enable tracks if needed
+            tracks.forEach(track => {
+                if (!track.enabled) {
+                    console.log('Game: Enabling audio track');
+                    track.enabled = true;
                 }
+            });
+
+            // Initialize AudioManager with context and stream
+            if (!this.audioManager) {
+                this.audioManager = new AudioManager();
+            }
+
+            try {
                 await this.audioManager.start(this.microphoneStream);
-                console.log('Game: AudioManager initialized');
+                console.log('Game: AudioManager initialized successfully');
             } catch (error) {
                 console.error('Game: AudioManager initialization error:', error);
                 throw error;
@@ -125,19 +127,12 @@ class Game {
             this.bird = new Bird();
             this.score = 0;
             this.isGameOver = false;
-
-            // Start the game loop
-            this.isRunning = true;
-            if (this.songDatabase) {
-                this.songDatabase.generateNewMelody();
-                this.songDatabase.playMelody();
-            }
             
-            console.log('Game: Starting game loop');
-            this.gameLoop();
-
+            // Start game loop
+            this.isRunning = true;
+            requestAnimationFrame(this.gameLoop.bind(this));
         } catch (error) {
-            console.error('Game start error:', error);
+            console.error('Game: Start error:', error);
             this.gameUI.style.display = 'block';
             this.gameStats.style.display = 'none';
             throw error;
@@ -421,5 +416,22 @@ class Game {
         };
         
         console.table(metrics);
+    }
+
+    cleanup() {
+        if (this.audioManager) {
+            this.audioManager.cleanup(false); // Don't stop the stream here
+        }
+        
+        if (this.microphoneStream) {
+            this.microphoneStream.getTracks().forEach(track => {
+                track.stop();
+                track.enabled = false;
+            });
+            this.microphoneStream = null;
+        }
+        
+        this.isRunning = false;
+        this.isGameOver = true;
     }
 } 
